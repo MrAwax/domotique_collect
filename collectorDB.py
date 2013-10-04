@@ -85,6 +85,7 @@ def processTempHumBaroSensor(msg, data):
     data["id2"] = msg[5]
     
     print("ID " + str(data["id1"]) + "-" + str(data["id2"]))
+    print("SubType " + str(data["subType"]) + " / Seq " + str(data["seqNbr"]))
 
     position = 6
     if data["packetType"] in [80,82,84]:
@@ -128,6 +129,120 @@ def processTempHumBaroSensor(msg, data):
     
     return data
 
+def processWindSensor(msg, data):
+    
+
+    data["subType"] = msg[2]
+    data["seqNbr"] = msg[3]
+    data["id1"] = msg[4]
+    data["id2"] = msg[5]
+    
+    print("ID " + str(data["id1"]) + "-" + str(data["id2"]))
+    print("SubType " + str(data["subType"]) + " / Seq " + str(data["seqNbr"]))
+
+    position = 6
+    
+    direction = accumulate(msg, position, 2)
+    if direction >= 32768:
+        direction = -(direction - 32768)
+    data["direction"] = direction
+    print("Direction " + str(data["direction"]) +" ¡")
+    position += 2
+
+    wind = accumulate(msg, position, 2)
+    if wind >= 32768:
+        wind = -(wind - 32768)
+    wind /= float(10)
+    data["wind"] = wind
+    print("Wind " + str(data["wind"]) +" m/s")
+    position += 2
+	
+    gust = accumulate(msg, position, 2)
+    if gust >= 32768:
+        gust = -(gust)
+    gust /= float(10)
+    data["gust"] = gust
+    print("Gust " + str(data["gust"]) +" m/s")
+    position += 2
+	
+    temp = accumulate(msg, position, 2)
+    if temp >= 32768:
+        temp = -(temp - 32768)
+    temp /= float(10)
+    data["temp"] = temp
+    print("Temperature " + str(data["temp"]) +" C")
+    position += 2
+    
+    chill = accumulate(msg, position, 2)
+    if chill >= 32768:
+        chill = -(chill - 32768)
+    chill /= float(10)
+    data["chill"] = chill
+    print("Chill " + str(data["chill"]) +" C")
+    position += 2
+
+    data["battery"] = (msg[position] & 0xF0) >> 4
+    data["RSSI"] = msg[position] & 0x0F
+    print("Battery " + str(data["battery"]))
+    print("RSSI " + str(data["RSSI"]))
+    
+    
+    
+    x = conn.cursor()
+    #try:
+    
+    x.execute("""INSERT into wind (event, id1, id2, direction, wind, gust, battery, signal) values (%s, %s, %s, %s, %s, %s, %s, %s)""",(datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), data["id1"], data["id2"], data["direction"], data["wind"], data["gust"], data["battery"], data["RSSI"]))
+    conn.commit()
+    #except:
+#        conn.rollback()
+    #    print "Unknown error- rollback"
+    
+    return data
+    
+def processRainSensor(msg, data):
+    
+
+    data["subType"] = msg[2]
+    data["seqNbr"] = msg[3]
+    data["id1"] = msg[4]
+    data["id2"] = msg[5]
+    
+    print("ID " + str(data["id1"]) + "-" + str(data["id2"]))
+    print("SubType " + str(data["subType"]) + " / Seq " + str(data["seqNbr"]))
+
+    position = 6
+    
+    rate = accumulate(msg, position, 2)
+    rate /= float(100)
+    data["rate"] = rate
+    print("Rate " + str(data["rate"]) +" mm/hr")
+    position += 2
+
+    total = accumulate(msg, position, 3)
+    total /= float(10)
+    data["total"] = total
+    print("Total " + str(data["total"]) +" mm")
+    position += 3
+
+    data["battery"] = (msg[position] & 0xF0) >> 4
+    data["RSSI"] = msg[position] & 0x0F
+    print("Battery " + str(data["battery"]))
+    print("RSSI " + str(data["RSSI"]))
+    
+    
+    
+    x = conn.cursor()
+    #try:
+    
+    x.execute("""INSERT into rain (event, id1, id2, rate, total, battery, signal) values (%s, %s, %s, %s, %s, %s, %s)""",(datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), data["id1"], data["id2"], data["rate"], data["total"], data["battery"], data["RSSI"]))
+    conn.commit()
+    #except:
+#        conn.rollback()
+    #    print "Unknown error- rollback"
+    
+    return data
+    
+    
 def processEnergyUsageSensor(msg, data):
     global status
     global conn
@@ -195,6 +310,8 @@ def parseMessage(msg):
     print('Packet length ' + str(msg[0]))
     packetLength = msg[0]
     packetType = msg[1]
+    
+    print(bytearray.tohex(msg))
 
     data = {'packetType': packetType, 'packetLength': packetLength}
 
@@ -225,8 +342,10 @@ def parseMessage(msg):
         data = processTempHumBaroSensor(msg, data)
     elif packetType == 85:
         print("Received Rain sensor (0x55) message")
+        data = processRainSensor(msg, data)
     elif packetType == 86:
         print("Received Wind sensor (0x56) message")
+        data = processWindSensor(msg, data)
     elif packetType == 87:
         print("Received UV sensor (0x57) message")
     elif packetType == 90:
@@ -253,7 +372,7 @@ def main():
     
     conn = None
     try:
-        conn = mdb.connect('localhost', 'homeuser', 'XXX', 'homeauto')
+        conn = mdb.connect('server', 'user', 'password', 'databse')
         
         cur = conn.cursor()
         cur.execute("SELECT VERSION()")
