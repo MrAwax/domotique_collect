@@ -1,11 +1,13 @@
 #!/opt/bin/python2.6
-# -*- coding: cp1252 -*-
 #
 
 import serial
 import time
 import datetime
 import MySQLdb as mdb
+import optparse
+
+from optparse import OptionParser
 
 conn = None
 
@@ -146,7 +148,9 @@ def processWindSensor(msg, data):
     if direction >= 32768:
         direction = -(direction - 32768)
     data["direction"] = direction
-    print("Direction " + str(data["direction"]) +" ¡")
+
+    print("Direction " + str(data["direction"]) +" o")
+
     position += 2
 
     wind = accumulate(msg, position, 2)
@@ -311,7 +315,7 @@ def parseMessage(msg):
     packetLength = msg[0]
     packetType = msg[1]
     
-    print(bytearray.tohex(msg))
+    # print(bytearray.tohex(msg))
 
     data = {'packetType': packetType, 'packetLength': packetLength}
 
@@ -372,7 +376,25 @@ def main():
     
     conn = None
     try:
-        conn = mdb.connect('server', 'user', 'password', 'databse')
+        parser = OptionParser()
+        parser.add_option("-s", "--server", dest="servername",
+                          help="server to connect to")
+        parser.add_option("-d", "--database", dest="database",
+                          help="database to use")
+        parser.add_option("-u", "--user", dest="username",
+                          help="user name", metavar="USERNAME")
+        parser.add_option("-p", "--password", dest="password",
+                          help="password")
+        
+        (options, args) = parser.parse_args()
+        
+        if len(args) != 0:
+            parser.error("incorrect number of arguments")
+            
+        if not(options.servername and options.database and options.username and options.password):
+            parser.error("missing parameters")
+
+        conn = mdb.connect(options.servername, options.username, options.password, options.database)
         
         cur = conn.cursor()
         cur.execute("SELECT VERSION()")
@@ -380,11 +402,6 @@ def main():
         print "Database version : %s " % data
         
         currentState = {}
-        # parser = argparse.ArgumentParser(description='Collect home automation events from RFXCOM')
-        # parser.add_argument("-t", "--tty-port", dest="ttyport", help="open port TTY", metavar="TTY", required=True)
-        # parser.add_argument("-u", "--url", dest="url", help = "post data to URL", metavar="URL", required=True)
-    
-        # args = parser.parse_args()
     
         # signal.signal(signal.SIGINT, signal_handler)
     
@@ -422,9 +439,9 @@ def main():
                         # sendData(data, args.url)
      
     finally:    
-			
-		if conn:    
-			conn.close()
+            
+        if conn:    
+            conn.close()
 
 
 
